@@ -1,0 +1,24 @@
+{
+  "name": "farcaster-group-chat-scraper",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "heavygweit",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heavygweit/farcaster-group-chat-scraper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/heavygweit/farcaster-group-chat-scraper/issues"
+  },
+  "homepage": "https://github.com/heavygweit/farcaster-group-chat-scraper#readme",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "puppeteer": "^22.9.0"
+  }
+}
