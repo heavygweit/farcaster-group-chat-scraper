@@ -1,4 +1,5 @@
 const puppeteer = require('puppeteer');
+const fs = require('fs');
 require('dotenv').config();
 const authToken = process.env.AUTH_TOKEN;
 console.log(authToken);
@@ -8,37 +9,9 @@ function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const scrollStep = 400;
-
-// Cleaning message data
-class Message {
-    constructor(sender, content, timestamp, reactions) {
-        this.sender = sender;
-        this.content = content;
-        this.timestamp = timestamp;
-        this.reactions = reactions;
-    }
-}
-
-class Conversation {
-    constructor(messages) {
-        this.messages = messages;
-    }
-
-    addMessage(message) {
-        this.messages.push(message);
-    }
-}
-
-function parseContent(rawMessage) {
-    // Split the raw message content into lines
-    const lines = rawMessage.split('\n');
-    // Example simplistic parsing:
-    const timestamp = lines.pop();  // Assuming the last line is the timestamp
-    const sender = lines.shift();  // Assuming the first line is the sender
-    const content = lines.join('\n');  // The rest is content
-    return new Message(sender, content, timestamp, {});
-}
+const scrollStep = 400; // How much the scraper scrolls each time
+const groupChatUrl = "https://warpcast.com/~/inbox/bc84590080c7c1a230c8b931bc9bac5cd828e89b919eb099f7997151f1cebfa8";
+const maxDuration = 5000; // For how long you want the scraper to scroll back
 
 // Scraper function
 
@@ -53,59 +26,46 @@ function parseContent(rawMessage) {
         headless: false,
     });
 
-    // const browser = await puppeteer.launch({ headless: false });
     const browserVersion = await browser.version();
     console.log(`Started ${browserVersion}`);
     const page = await browser.newPage();
     
-    // Use the token to perform authenticated actions
     await page.setExtraHTTPHeaders({
         'Authorization': `Bearer ${authToken}`
     });
 
     await page.goto('https://warpcast.com/', { waitUntil: 'networkidle2' });
 
-    console.log('Before waitForFunction');
     await page.waitForFunction('document.querySelector("body").innerText.includes("Home")');
-    console.log('After waitForFunction');
 
-    await page.goto('https://warpcast.com/~/inbox/bc84590080c7c1a230c8b931bc9bac5cd828e89b919eb099f7997151f1cebfa8', { waitUntil: 'networkidle2' });
+    await page.goto(groupChatUrl, { waitUntil: 'networkidle2' });
 
     let selector = '.scrollbar-vert.mt-0\\.5.h-full.w-full.overflow-auto.scroll-auto.will-change-transform';
-
-    let lastHeight = await page.evaluate((selector) => {
-        const scrollableContainer = document.querySelector(selector);
-        return scrollableContainer.scrollHeight;
-    }, selector);
 
     let messages = [];
 
     const startTime = Date.now();
-    const maxDuration = 5000;
-
+    let scrollCounter = 0;
     try {
         while (Date.now() - startTime < maxDuration) {
+            
             let scrolledToEnd = await page.evaluate((selector, scrollStep) => {
                 const scrollableContainer = document.querySelector(selector);
                 let currentScrollTop = scrollableContainer.scrollTop;
                 scrollableContainer.scrollTop += scrollStep;
+                
+                if (currentScrollTop === scrollableContainer.scrollTop) {
+                    scrollCounter++;
+                }
                 return currentScrollTop === scrollableContainer.scrollTop;
             }, selector, scrollStep);
+        
+            scrollCounter++;
 
-            await wait(1000);
-
-            // Extract messages
-            const newMessages = await page.evaluate((selector) => {
-                const nodes = Array.from(document.querySelectorAll(selector + ' > div')); // Adjust if the structure inside has different organization
-                return nodes.map(node => ({
-                    dataIndex: node.getAttribute('data-index'),
-                    content: node.innerText
-                }));
-            }, selector);
-
-            messages = [...newMessages, ...messages];
+            await wait(200);
 
             if (scrolledToEnd) {
+                console.log('Scrolled to top of chat');
                 break;
             }
         }
@@ -113,31 +73,65 @@ function parseContent(rawMessage) {
         console.error('Error during scrolling and extraction:', error);
     }
 
-    console.log('Messages:', messages);
-    console.log('Raw data collected. Starting to clean.');
-    
-    function cleanAndStructureData(rawMessages) {
-        const structuredMessages = rawMessages.map(rawMessage => {
-            const lines = rawMessage.split('\n');
-            const timestamp = lines.find(line => /\d{1,2}:\d{2} (AM|PM)/.test(line));
-            const contentIndex = lines.indexOf(timestamp);
-            const sender = lines[0];
-            const content = lines.slice(1, contentIndex).join('\n').trim();
-            // Extract reactions if present
-            let reactions = {};
-            lines.slice(contentIndex + 1).forEach(line => {
-                const match = line.match(/([\p{Emoji_Presentation}\p{Extended_Pictographic}]+)\s(\d+)/u);
-                if (match) {
-                    reactions[match[1]] = parseInt(match[2], 10);
-                }
-            });
-            return { sender, content, timestamp, reactions };
+    // message extraction
+    const uniqueMessages = new Set();
+
+try {
+    while (scrollCounter > 0) {
+        let scrolledToEnd = await page.evaluate((selector, scrollStep) => {
+            const scrollableContainer = document.querySelector(selector);
+            let currentScrollTop = scrollableContainer.scrollTop;
+            scrollableContainer.scrollTop -= scrollStep; // Adjust scroll direction if needed
+            return currentScrollTop === scrollableContainer.scrollTop;
+        }, selector, scrollStep);
+
+        scrollCounter--;
+
+        await wait(200);  // Ensuring pause for loading
+
+        const rawMessages = await page.evaluate((selector) => {
+            const nodes = Array.from(document.querySelectorAll(selector + ' > div > div'));
+            return nodes.map(node => ({
+                dataIndex: node.getAttribute('data-index'),
+                content: node.innerText
+            }));
+        }, selector);
+
+        // Filter and add only new messages
+        rawMessages.forEach(msg => {
+            if (!uniqueMessages.has(msg.dataIndex)) {
+                messages.push(msg);
+                uniqueMessages.add(msg.dataIndex);
+            }
         });
-        return structuredMessages;
+
+        if (scrolledToEnd) {
+            console.log('Scrolled to end or start of chat');
+            break;
+        }
     }
-    
-    const structuredData = cleanAndStructureData(messages);
-    // console.log(`Cleaned data:`, structuredData);
+    } catch (error) {
+        console.error('Error during scrolling and extraction:', error);
+    }
+
+    console.log(`Extracted ${messages.length} messages`);
+
+    // Order messages by dataIndex
+
+    function orderMessages(messages) {
+        return messages.sort((a, b) => a.dataIndex - b.dataIndex);
+    };
+    const orderedMessages = orderMessages(messages);
+
+    // Create a text file and save the message data
+    // Change to your own destination
+    fs.writeFile('messageData.txt', JSON.stringify(orderedMessages), (err) => {
+        if (err) {
+            console.error('Error writing message data:', err);
+        } else {
+            console.log('Message data saved successfully');
+        }
+    });
     
 
     await browser.close();
