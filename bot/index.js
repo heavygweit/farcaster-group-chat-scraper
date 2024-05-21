@@ -9,9 +9,14 @@ function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const scrollStep = 400; // How much the scraper scrolls each time
+// How many pixels are scrolled each iteration
+const scrollStep = 400; 
+// Change to your group chat URL on Warpcast
 const groupChatUrl = "https://warpcast.com/~/inbox/bc84590080c7c1a230c8b931bc9bac5cd828e89b919eb099f7997151f1cebfa8";
-const maxDuration = 5000; // For how long you want the scraper to scroll back
+// How long the scraper scrolls back for (5000ms is about 75 messages, depending on length)
+const maxDuration = 5000; 
+// Change to your preferred browser path
+const browserPath = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser';
 
 // Scraper function
 
@@ -22,7 +27,7 @@ const maxDuration = 5000; // For how long you want the scraper to scroll back
     }
 
     const browser = await puppeteer.launch({
-        executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+        executablePath: browserPath,
         headless: false,
     });
 
