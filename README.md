@@ -17,6 +17,7 @@ This package allows you to scrape group chat data using your own account on Farc
     ```
     AUTH_TOKEN=<YOUR_TOKEN>
     ```
+4. In the `bot` folder, navigate to `index.js` and customize the constants to your needs (`groupChatUrl`, `maxDuration`, and `browserPath`). Save your changes.
 
 ## Usage
 

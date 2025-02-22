@@ -2,7 +2,6 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 require('dotenv').config();
 const authToken = process.env.AUTH_TOKEN;
-console.log(authToken);
 
 // Scraper setup
 function wait(ms) {
